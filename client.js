@@ -3,7 +3,7 @@ const session = process.argv[2] ? process.argv[2] + '.json' : 'session.json'
 const { state, saveState } = useSingleFileAuthState(session)
 const pino = require('pino'), path = require('path'), fs = require('fs'), colors = require('@colors/colors/safe'), qrcode = require('qrcode-terminal')
 const spinnies = new (require('spinnies'))()
-const { Socket, Serialize, Scandir } = require('./system/extra')
+const { Socket, Serialize } = require('./system/extra')
 global.props = new (require('./system/dataset'))
 global.neoxr = new (require('./system/map'))
 global.Func = new (require('./system/function'))
@@ -114,9 +114,6 @@ const connect = async () => {
          m = chatUpdate.messages[0]
          if (!m.message) return
          Serialize(client, m)
-         Scandir('./plugins').then(files => {
-            global.client.plugins = Object.fromEntries(files.filter(v => v.endsWith('.js')).map(file => [path.basename(file).replace('.js', ''), require(file)]))
-         }).catch(e => console.error(e))
          require('./system/config'), require('./handler')(client, m)
       } catch (e) {
          console.log(e)
