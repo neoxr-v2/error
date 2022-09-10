@@ -132,7 +132,7 @@ module.exports = async (m, {
             break
          }
 
-         case 'server': {
+         case 'server': { 
             const json = await Func.fetchJson('http://ip-api.com/json')
             return client.reply(m.chat, Func.jsonFormat(json), m)
             break
