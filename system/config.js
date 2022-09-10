@@ -3,7 +3,7 @@ global.owner = '6282141544557'
 // Owner name
 global.owner_name = 'Customer Service'
 // Maximum upload file size limit (Default : 250 MB)
-global.max_upload = 250
+global.max_upload = 150
 // Delay for spamming protection (Default : 3 seconds)
 global.cooldown = 3
 // User Limitation (Default : 10)
