@@ -52,7 +52,7 @@ module.exports = async (m, {
             break
          }
 
-         case /yt?(a|mp3)/i.test(command): {
+         case 'ytmp3': {
             if (!args || !args[0]) return client.reply(m.chat, Func.example(isPrefix, command, 'https://youtu.be/zaRFmdtLhQ8'), m)
             if (!/^(?:https?:\/\/)?(?:www\.|m\.|music\.)?youtu\.?be(?:\.com)?\/?.*(?:watch|embed)?(?:.*v=|v\/|\/)([\w\-_]+)\&?/.test(args[0])) return client.reply(m.chat, global.status.invalid, m)
             client.sendReact(m.chat, '🕒', m.key)
@@ -84,7 +84,7 @@ module.exports = async (m, {
             break
          }
 
-         case /yt?(v|mp4)/i.test(command): {
+         case 'ytmp4': {
             if (!args || !args[0]) return client.reply(m.chat, Func.example(isPrefix, command, 'https://youtu.be/zaRFmdtLhQ8'), m)
             if (!/^(?:https?:\/\/)?(?:www\.|m\.|music\.)?youtu\.?be(?:\.com)?\/?.*(?:watch|embed)?(?:.*v=|v\/|\/)([\w\-_]+)\&?/.test(args[0])) return client.reply(m.chat, global.status.invalid, m)
             client.sendReact(m.chat, '🕒', m.key)
