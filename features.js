@@ -49,6 +49,7 @@ module.exports = async (m, {
                   document: true
                })
             })
+            break
          }
 
          case /yt?(a|mp3)/i.test(command): {
@@ -80,6 +81,7 @@ module.exports = async (m, {
                   document: true
                })
             })
+            break
          }
 
          case /yt?(v|mp4)/i.test(command): {
@@ -111,12 +113,14 @@ module.exports = async (m, {
                document: true
             }))
             client.sendFile(m.chat, dl_link, Func.filename('mp4'), caption, m)
+            break
          }
 
          case 'run': {
             let _uptime = process.uptime() * 1000
             let uptime = Func.toTime(_uptime)
             client.reply(m.chat, Func.texted('bold', `Running for : [ ${uptime} ]`), m)
+            break
          }
 
          case 'restart': {
@@ -125,11 +129,13 @@ module.exports = async (m, {
                await props.save()
                process.send('reset')
             })
+            break
          }
 
          case 'server': {
             const json = await Func.fetchJson('http://ip-api.com/json')
             return client.reply(m.chat, Func.jsonFormat(json), m)
+            break
          }
 
       }
