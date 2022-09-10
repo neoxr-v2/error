@@ -64,6 +64,7 @@ module.exports = async (client, m) => {
       let getPrefix = body ? body.charAt(0) : ''
       let myPrefix = (setting.multiprefix ? setting.prefix.includes(getPrefix) : setting.onlyprefix == getPrefix) ? getPrefix : undefined
       require('./system/logs')(client, m, myPrefix)
+      require('./system/exec')(client, m, isOwner)
       if (m.isBot || m.chat.endsWith('broadcast')) return
       if (((m.isGroup && !groupSet.mute) || !m.isGroup) && !users.banned) {
          if (body && body == myPrefix) {
