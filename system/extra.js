@@ -2,8 +2,13 @@ const fs = require('fs')
 const { writeFile } = require('fs/promises')
 const mime = require('mime-types')
 const path = require('path')
+const { promisify } = require('util')
+const { resolve } = require('path')
+const readdir = promisify(fs.readdir)
+const stat = promisify(fs.stat)
 const fetch = require('node-fetch')
 const FileType = require('file-type')
+const ffmpeg = require('fluent-ffmpeg')
 const { tmpdir } = require('os')
 const {
    default: makeWASocket,
@@ -23,6 +28,7 @@ const {
    jidDecode
 } = require('@adiwajshing/baileys')
 const PhoneNumber = require('awesome-phonenumber')
+const WSF = require('wa-sticker-formatter')
 
 Socket = (...args) => {
    let client = makeWASocket(...args)
@@ -32,6 +38,11 @@ Socket = (...args) => {
    })
 
    let parseMention = text => [...text.matchAll(/@([0-9]{5,16}|0)/g)].map(v => v[1] + '@s.whatsapp.net')
+   
+   let tags = {
+      album: 'Neoxr Music',
+      APIC: fs.readFileSync('./media/image/thumb.jpg')
+   }
    
    client.decodeJid = (jid) => {
       if (!jid) return jid
@@ -91,6 +102,63 @@ Socket = (...args) => {
       return waMessage
    }
    
+   client.sendSticker = async (jid, path, quoted, options = {}) => {
+      let buffer = /^https?:\/\//.test(path) ? await (await fetch(path)).buffer() : Buffer.isBuffer(path) ? path : /^data:.*?\/.*?;base64,/i.test(path) ? Buffer.from(path.split`,` [1], 'base64') : Buffer.alloc(0)
+      let {
+         extension
+      } = await Func.getFile(buffer)
+      const media = tmpdir() + '/' + Func.filename(extension)
+      const result = tmpdir() + '/' + Func.filename('webp')
+      if (extension === 'webp') {
+         await writeFile(result, buffer)
+         await WSF.setMetadata(options.packname, options.author, result)
+         await client.sendMessage(jid, {
+            sticker: fs.readFileSync(result),
+            ...options
+         }, {
+            quoted
+         })
+         try {
+            fs.unlinkSync(result)
+         } catch (e) {
+            console.log(e)
+         }
+      } else {
+         ffmpeg(`${media}`)
+            .input(media)
+            .on('error', function(err) {
+               fs.unlinkSync(media)
+            })
+            .on('end', function() {
+               buildSticker()
+            })
+            .addOutputOptions([
+               `-vcodec`,
+               `libwebp`,
+               `-vf`,
+               `scale='min(320,iw)':min'(320,ih)':force_original_aspect_ratio=decrease,fps=15, pad=320:320:-1:-1:color=white@0.0, split [a][b]; [a] palettegen=reserve_transparent=on:transparency_color=ffffff [p]; [b][p] paletteuse`
+            ])
+            .toFormat('webp')
+            .save(result)
+         await writeFile(media, buffer)
+         const buildSticker = async () => {
+            await WSF.setMetadata(options.packname, options.author, result)
+            await client.sendMessage(jid, {
+               sticker: fs.readFileSync(result),
+               ...options
+            }, {
+               quoted
+            })
+            try {
+               fs.unlinkSync(media)
+               fs.unlinkSync(result)
+            } catch (e) {
+               console.log(e)
+            }
+         }
+      }
+   }
+
    client.copyMsg = (jid, message, text = '', sender = client.user.id, options = {}) => {
       let copy = message.toJSON()
       let type = Object.keys(copy.message)[0]
@@ -189,66 +257,115 @@ Socket = (...args) => {
          mime,
          size
       } = await Func.getFile(url, name, opts && opts.referer ? opts.referer : false)
-      if (!status) return client.reply(jid, global.status.error, m)
-      client.refreshMediaConn(false)
+      if (!status) return client.sendMessage(jid, {
+         text: global.status.error
+      }, {
+         quoted
+      })
+      client.refreshMediaConn(true)
       if (opts && opts.document) {
-         await client.sendPresenceUpdate('composing', jid)
-         return client.sendMessage(jid, {
+         const process = await Func.metaAudio(file, {
+            title: filename.replace(new RegExp('.mp3', 'i'), ''),
+            ...tags,
+            APIC: opts && opts.APIC ? opts.APIC : tags.APIC
+         })
+         const message = await prepareWAMessageMedia({
             document: {
-               url: file
+               url: process.file
             },
             fileName: filename,
             mimetype: mime,
             ...options
          }, {
+            upload: client.waUploadToServer
+         })
+         let media = generateWAMessageFromContent(jid, {
+            documentMessage: message.documentMessage
+         }, {
             quoted
+         })
+         await client.sendPresenceUpdate('composing', jid)
+         return await client.relayMessage(jid, media.message, {
+            messageId: media.key.id
          }).then(() => fs.unlinkSync(file))
       } else {
          if (/image\/(jpe?g|png)/.test(mime)) {
             let thumb = await generateThumbnail(file, mime)
-            await client.sendPresenceUpdate('composing', jid)
-            return client.sendMessage(jid, {
+            const message = await prepareWAMessageMedia({
                image: {
                   url: file
                },
                caption: caption,
                jpegThumbnail: thumb,
-               mentions: [...caption.matchAll(/@(\d{0,16})/g)].map(v => v[1] + '@s.whatsapp.net'),
+               contextInfo: {
+                  mentionedJid: [...caption.matchAll(/@(\d{0,16})/g)].map(v => v[1] + '@s.whatsapp.net')
+               },
                ...options
             }, {
+               upload: client.waUploadToServer
+            })
+            let media = generateWAMessageFromContent(jid, {
+               imageMessage: message.imageMessage
+            }, {
                quoted
+            })
+            await client.sendPresenceUpdate('composing', jid)
+            return await client.relayMessage(jid, media.message, {
+               messageId: media.key.id
             }).then(() => fs.unlinkSync(file))
          } else if (/video/.test(mime)) {
-        	let thumb = await generateThumbnail(file, mime)
-            await client.sendPresenceUpdate('composing', jid)
-            return client.sendMessage(jid, {
+            let thumb = await generateThumbnail(file, mime)
+            const message = await prepareWAMessageMedia({
                video: {
                   url: file
                },
                caption: caption,
                jpegThumbnail: thumb,
                gifPlayback: opts && opts.gif ? true : false,
-               mentions: [...caption.matchAll(/@(\d{0,16})/g)].map(v => v[1] + '@s.whatsapp.net'),
-               ...options
-            }, {
-               quoted
-            }).then(() => fs.unlinkSync(file))
-         } else if (/audio/.test(mime)) {
-            await client.sendPresenceUpdate(opts && opts.ptt ? 'recoding' : 'composing', jid)
-            return client.sendMessage(jid, {
-               audio: {
-                  url: file
+               contextInfo: {
+                  mentionedJid: [...caption.matchAll(/@(\d{0,16})/g)].map(v => v[1] + '@s.whatsapp.net')
                },
-               ptt: opts && opts.ptt ? true : false,
-               mimetype: mime,
-               mentions: [...caption.matchAll(/@(\d{0,16})/g)].map(v => v[1] + '@s.whatsapp.net'),
                ...options
             }, {
                upload: client.waUploadToServer
+            })
+            let media = generateWAMessageFromContent(jid, {
+               videoMessage: message.videoMessage
+            }, {
+               quoted
+            })
+            await client.sendPresenceUpdate('composing', jid)
+            return await client.relayMessage(jid, media.message, {
+               messageId: media.key.id
+            }).then(() => fs.unlinkSync(file))
+         } else if (/audio/.test(mime)) {
+            const process = await Func.metaAudio(file, {
+               title: filename.replace(new RegExp('.mp3', 'i'), ''),
+               ...tags,
+               APIC: opts && opts.APIC ? opts.APIC : tags.APIC
+            })
+            const message = await prepareWAMessageMedia({
+               audio: {
+                  url: process.file
+               },
+               ptt: opts && opts.ptt ? true : false,
+               mimetype: mime,
+               ...options
+            }, {
+               upload: client.waUploadToServer
+            })
+            let media = generateWAMessageFromContent(jid, {
+               audioMessage: message.audioMessage
+            }, {
+               quoted
+            })
+            await client.sendPresenceUpdate(opts && opts.ptt ? 'recoding' : 'composing', jid)
+            return await client.relayMessage(jid, media.message, {
+               messageId: media.key.id
             }).then(() => fs.unlinkSync(file))
          } else {
             await client.sendPresenceUpdate('composing', jid)
-            return client.sendMessage(jid, {
+            const message = await prepareWAMessageMedia({
                document: {
                   url: file
                },
@@ -256,7 +373,15 @@ Socket = (...args) => {
                mimetype: mime,
                ...options
             }, {
+               upload: client.waUploadToServer
+            })
+            let media = generateWAMessageFromContent(jid, {
+               documentMessage: message.documentMessage
+            }, {
                quoted
+            })
+            return await client.relayMessage(jid, media.message, {
+               messageId: media.key.id
             }).then(() => fs.unlinkSync(file))
          }
       }
@@ -421,5 +546,15 @@ Serialize = (client, m) => {
    return M.fromObject(m)
 }
 
+Scandir = async (dir) => {
+   let subdirs = await readdir(dir)
+   let files = await Promise.all(subdirs.map(async (subdir) => {
+      let res = resolve(dir, subdir)
+      return (await stat(res)).isDirectory() ? Scandir(res) : res
+   }));
+   return files.reduce((a, f) => a.concat(f), [])
+}
+
 exports.Socket = Socket
 exports.Serialize = Serialize
+exports.Scandir = Scandir

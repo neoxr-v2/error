@@ -101,10 +101,156 @@ module.exports = async (client, m) => {
             isAdmin,
             isBotAdmin
          })
+         const is_commands = Object.fromEntries(Object.entries(global.client.plugins).filter(([name, prop]) => prop.run.usage))
+         let commands = Func.arrayJoin(Object.values(is_commands).map(v => v.run.usage))
+         let matcher = Func.matcher(command, commands).filter(v => v.accuracy >= 60)
+         try {
+            if (new Date() * 1 - chats.command > (global.cooldown * 1000)) {
+               chats.command = new Date() * 1
+            } else {
+               if (!m.fromMe) return
+            }
+         } catch (e) {
+            global.db.chats[m.chat] = {}
+            global.db.chats[m.chat].command = new Date() * 1
+            global.db.chats[m.chat].chat = 1
+            global.db.chats[m.chat].lastseen = new Date() * 1
+         }
+         if (!commands.includes(command) && matcher.length > 0 && !setting.self) {
+            if (!m.isGroup || (m.isGroup && !groupSet.mute)) return client.reply(m.chat, `🚩 Command you are using is wrong, try the following recommendations :\n\n${matcher.map(v => '➠ *' + isPrefix + v.string + '* (' + v.accuracy + '%)').join('\n')}`, m)
+         }
+         if (setting.error.includes(command) && !setting.self) return client.reply(m.chat, Func.texted('bold', `🚩 Command _${isPrefix + command}_ disabled.`), m)
+         if (commands.includes(command)) {
+            users.hit += 1
+            users.usebot = new Date() * 1
+            Func.hitstat(command, m.sender)
+         }
+         for (let name in is_commands) {
+            let cmd = is_commands[name].run
+            let turn = cmd.usage instanceof Array ? cmd.usage.includes(command) : cmd.usage instanceof String ? cmd.usage == command : false
+            if (body && global.evaluate_chars.some(v => body.startsWith(v)) && !body.startsWith(myPrefix)) return
+            if (!turn) continue
+            if (!m.isGroup && global.blocks.some(no => m.sender.startsWith(no))) return client.updateBlockStatus(m.sender, 'block')
+            if (setting.self && !isOwner && !m.fromMe) return
+            if (setting.pluginDisable.includes(name)) return client.reply(m.chat, Func.texted('bold', `🚩 Plugin disabled by Owner.`), m)
+            if (!m.isGroup && !['owner', 'create_bot'].includes(name) && chats && !isPrem && !users.banned && new Date() * 1 - chats.lastchat < global.timer) continue
+            if (!m.isGroup && !['owner', 'create_bot'].includes(name) && chats && !isPrem && !users.banned && setting.groupmode) return client.sendMessageModify(m.chat, `🚩 Using bot in private chat only for premium user, upgrade to premium plan only Rp. 5,000,- to get 1K limits.\n\nIf you want to buy contact *${myPrefix}owner*`, m, {
+               title: '© neoxr-bot v2.2.0 (Public Bot)',
+               largeThumb: true,
+               thumbnail: await Func.fetchBuffer('https://telegra.ph/file/0b32e0a0bb3b81fef9838.jpg'),
+               url: 'https://chat.whatsapp.com/Dh1USlrqIfmJT6Ji0Pm2pP'
+            }).then(() => chats.lastchat = new Date() * 1)
+            if (!['me', 'owner'].includes(name) && users && (users.banned || new Date - users.banTemp < global.timer)) return
+            if (m.isGroup && !['activation'].includes(name) && groupSet.mute) continue
+            if (cmd.cache && cmd.location) {
+               let file = require.resolve(cmd.location)
+               Func.reload(file)
+            }
+            if (cmd.error) {
+               client.reply(m.chat, global.status.errorF, m)
+               continue
+            }
+            if (cmd.owner && !isOwner) {
+               client.reply(m.chat, global.status.owner, m)
+               continue
+            }
+            if (cmd.premium && !isPrem) {
+               client.reply(m.chat, global.status.premium, m)
+               continue
+            }
+            if (cmd.limit && users.limit < 1) {
+               return client.reply(m.chat, `🚩 Your bot usage has reached the limit and will be reset at 00.00\n\nTo get more limits, upgrade to a premium plan send *${prefixes[0]}premium*`, m).then(() => users.premium = false)
+               continue
+            }
+            if (cmd.limit && users.limit > 0) {
+               let limit = cmd.limit.constructor.name == 'Boolean' ? 1 : cmd.limit
+               if (users.limit >= limit) {
+                  users.limit -= limit
+               } else {
+                  client.reply(m.chat, Func.texted('bold', `🚩 Your limit is not enough to use this feature.`), m)
+                  continue
+               }
+            }
+            if (cmd.group && !m.isGroup) {
+               client.reply(m.chat, global.status.group, m)
+               continue
+            } else if (cmd.botAdmin && !isBotAdmin) {
+               client.reply(m.chat, global.status.botAdmin, m)
+               continue
+            } else if (cmd.admin && !isAdmin) {
+               client.reply(m.chat, global.status.admin, m)
+               continue
+            }
+            if (cmd.private && m.isGroup) {
+           	client.reply(m.chat, global.status.private, m)
+               continue
+            }
+            cmd.async(m, {
+               client,
+               args,
+               text,
+               isPrefix,
+               command,
+               participants,
+               blockList,
+               isPrem,
+               isOwner,
+               isAdmin,
+               isBotAdmin
+            })
+            break
+         }
+      } else {
+         let prefixes = setting.multiprefix ? setting.prefix : [setting.onlyprefix]
+         const is_events = Object.fromEntries(Object.entries(global.client.plugins).filter(([name, prop]) => !prop.run.usage))
+         for (let name in is_events) {
+            let event = is_events[name].run
+            if (event.cache && event.location) {
+               let file = require.resolve(event.location)
+               Func.reload(file)
+            }
+            if (!m.isGroup && global.blocks.some(no => m.sender.startsWith(no))) return client.updateBlockStatus(m.sender, 'block')
+            if (m.isGroup && !['exec'].includes(name) && groupSet.mute) continue
+            if (setting.pluginDisable.includes(name)) continue
+            if (!m.isGroup && chats && !isPrem && !users.banned && new Date() * 1 - chats.lastchat < global.timer) continue
+            if (!m.isGroup && chats && !isPrem && !users.banned && setting.groupmode) return client.sendMessageModify(m.chat, `🚩 Using bot in private chat only for premium user, upgrade to premium plan only Rp. 5,000,- to get 1K limits.\n\nIf you want to buy contact *${prefixes[0]}owner*`, m, {
+               title: '© neoxr-bot v2.2.0 (Public Bot)',
+               largeThumb: true,
+               thumbnail: await Func.fetchBuffer('https://telegra.ph/file/0b32e0a0bb3b81fef9838.jpg'),
+               url: 'https://chat.whatsapp.com/Dh1USlrqIfmJT6Ji0Pm2pP'
+            }).then(() => chats.lastchat = new Date() * 1)
+            if (setting.self && !['chatAI', 'exec'].includes(name) && !isOwner && !m.fromMe) continue
+            if (!m.isGroup && ['chatAI'].includes(name) && body && Func.socmed(body)) continue
+            if (!['exec', 'restrict'].includes(name) && users && users.banned) continue
+            if (!['anti_link', 'anti_tagall', 'anti_virtex', 'filter', 'exec'].includes(name) && users && (users.banned || new Date - users.banTemp < global.timer)) continue
+            if (!['anti_link', 'anti_tagall', 'anti_virtex', 'filter', 'exec'].includes(name) && groupSet && groupSet.mute) continue
+            if (event.error) continue
+            if (event.owner && !isOwner) continue
+            if (event.moderator && !isMod) continue
+            if (event.group && !m.isGroup) continue
+            if (event.limit && users.limit < 1) continue
+            if (event.botAdmin && !isBotAdmin) continue
+            if (event.admin && !isAdmin) continue
+            if (event.private && m.isGroup) continue
+            if (event.download && (!setting.autodownload || (body && global.evaluate_chars.some(v => body.startsWith(v))))) continue
+            event.async(m, {
+               client,
+               body,
+               participants,
+               prefixes,
+               isOwner,
+               isAdmin,
+               isBotAdmin,
+               users,
+               chats,
+               groupSet,
+               groupMetadata,
+               setting
+            })
+         }
       }
    } catch (e) {
       console.log(e)
-      if (!m.fromMe) client.reply(m.chat, Func.jsonFormat(e), m)
    }
 }
 
